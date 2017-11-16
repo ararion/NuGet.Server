@@ -29,15 +29,8 @@ namespace NuGet.Server.DataServices
         // Exposed through ordinary Web API route. Bypasses OData pipeline.
         public async Task<HttpResponseMessage> ClearCache(CancellationToken token)
         {
-            if (RequestContext.IsLocal)
-            {
-                await _serverRepository.ClearCacheAsync(token);
-                return CreateStringResponse(HttpStatusCode.OK, "Server cache has been cleared.");
-            }
-            else
-            {
-                return CreateStringResponse(HttpStatusCode.Forbidden, "Clear cache is only supported for local requests.");
-            }
+            await _serverRepository.ClearCacheAsync(token);
+            return CreateStringResponse(HttpStatusCode.OK, "Server cache has been cleared.");
         }
     }
 }
