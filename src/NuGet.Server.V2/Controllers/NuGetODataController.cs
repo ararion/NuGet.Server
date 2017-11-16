@@ -392,41 +392,46 @@ namespace NuGet.Server.V2.Controllers
 
             // Copy the package to a temporary file
             var temporaryFile = Path.GetTempFileName();
-            using (var temporaryFileStream = File.Open(temporaryFile, FileMode.OpenOrCreate, FileAccess.ReadWrite))
+            HttpResponseMessage retValue;
+            try
             {
-                if (Request.Content.IsMimeMultipartContent())
+                using (var temporaryFileStream = File.Open(temporaryFile, FileMode.OpenOrCreate, FileAccess.ReadWrite))
                 {
-                    var multipartContents = await Request.Content.ReadAsMultipartAsync();
-                    await multipartContents.Contents.First().CopyToAsync(temporaryFileStream);
+                    if (Request.Content.IsMimeMultipartContent())
+                    {
+                        var multipartContents = await Request.Content.ReadAsMultipartAsync();
+                        await multipartContents.Contents.First().CopyToAsync(temporaryFileStream);
+                    }
+                    else
+                    {
+                        await Request.Content.CopyToAsync(temporaryFileStream);
+                    }
+                }
+
+                var package = new OptimizedZipPackage(temporaryFile);
+                
+                if (_authenticationService.IsAuthenticated(User, apiKey, package.Id))
+                {
+                    await _serverRepository.AddPackageAsync(package, token);
+                    retValue = Request.CreateResponse(HttpStatusCode.Created);
                 }
                 else
                 {
-                    await Request.Content.CopyToAsync(temporaryFileStream);
+                    retValue = CreateStringResponse(HttpStatusCode.Forbidden, string.Format("Access denied for package '{0}'.", package.Id));
                 }
+
+                package = null;
             }
-
-            var package = new OptimizedZipPackage(temporaryFile);
-
-
-            HttpResponseMessage retValue;
-            if (_authenticationService.IsAuthenticated(User, apiKey, package.Id))
+            finally
             {
-                await _serverRepository.AddPackageAsync(package, token);
-                retValue = Request.CreateResponse(HttpStatusCode.Created);
-            }
-            else
-            {
-                retValue = CreateStringResponse(HttpStatusCode.Forbidden, string.Format("Access denied for package '{0}'.", package.Id));
-            }
-
-            package = null;
-            try
-            {
-                File.Delete(temporaryFile);
-            }
-            catch (Exception)
-            {                
-                retValue = CreateStringResponse(HttpStatusCode.InternalServerError, "Could not remove temporary upload file.");
+                try
+                {
+                    File.Delete(temporaryFile);
+                }
+                catch (Exception)
+                {
+                    retValue = CreateStringResponse(HttpStatusCode.InternalServerError, "Could not remove temporary upload file.");
+                }
             }
 
             return retValue;
